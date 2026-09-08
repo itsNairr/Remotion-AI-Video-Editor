@@ -1,69 +1,95 @@
-import Image from "next/image";
+'use client';
+
+import { ExportModal } from '@/components/editor/ExportModal';
+import { MediaBin } from '@/components/editor/MediaBin';
+import { PromptInput } from '@/components/editor/PromptInput';
+import { RemotionPlayer } from '@/components/player/RemotionPlayer';
+import { TimelineEditor } from '@/components/timeline/TimelineEditor';
+import { useVideoEditor } from '@/composables/useVideoEditor';
+import { Download, Film, Layers, Video } from 'lucide-react';
+import React, { useState } from 'react';
 
 export default function Home() {
+  const editor = useVideoEditor();
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  const clipCount = editor.project.clips?.length || 1;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      {/* Top App Header */}
+      <header className="h-16 border-b border-zinc-800/80 bg-zinc-900/40 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-950/50">
+            <Film size={20} className="text-white" />
+          </div>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold tracking-tight text-white">PromptVideo</h1>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Copilot Canvas
+              </span>
+            </div>
+            <span className="text-[11px] text-zinc-400 font-medium truncate max-w-[200px]">
+              {editor.project.title}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-4 text-xs font-mono text-zinc-400 border-x border-zinc-800 px-4 py-1">
+            <span className="flex items-center gap-1.5">
+              <Video size={14} className="text-zinc-500" />
+              {editor.project.durationSec}s Total
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Layers size={14} className="text-zinc-500" />
+              {clipCount} {clipCount === 1 ? 'Clip' : 'Clips'} &bull; {editor.project.overlays.length} Overlays
+            </span>
+          </div>
+
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition active:scale-95 cursor-pointer"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <Download size={15} />
+            <span>Export MP4</span>
+          </button>
         </div>
-      </main>
-    </div>
+      </header>
+
+      {/* Main Workspace Area */}
+      <div className="flex-1 p-5 flex flex-col gap-5 max-w-[1600px] mx-auto w-full">
+        {/* Upper Studio: Media Bin (Left) + Player (Center) + Copilot Chat (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-[520px]">
+          {/* Column 1: Media Bin & Uploads */}
+          <div className="lg:col-span-3 h-full">
+            <MediaBin editor={editor} />
+          </div>
+
+          {/* Column 2: Video Player with Direct Canvas Drag */}
+          <div className="lg:col-span-5 h-full flex flex-col">
+            <RemotionPlayer editor={editor} />
+          </div>
+
+          {/* Column 3: AI Timeline Copilot (Full Height) */}
+          <div className="lg:col-span-4 h-full">
+            <PromptInput editor={editor} />
+          </div>
+        </div>
+
+        {/* Lower Studio: Stackable Multi-Track Timeline with In-Timeline Receipts */}
+        <div className="w-full">
+          <TimelineEditor editor={editor} />
+        </div>
+      </div>
+
+      {/* Real MP4 Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        project={editor.project}
+      />
+    </main>
   );
 }
