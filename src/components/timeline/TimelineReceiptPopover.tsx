@@ -115,6 +115,46 @@ export const TimelineReceiptPopover: React.FC<TimelineReceiptPopoverProps> = ({
         </div>
       </div>
 
+      {/* Track Assignment Selector */}
+      {selected.track !== 'captions' && selected.track !== 'cuts' && (
+        <div className="flex items-center justify-between bg-zinc-950/40 px-2.5 py-1 rounded-lg border border-zinc-800/80 text-[11px]">
+          <span className="text-zinc-400">Track Layer:</span>
+          <div className="flex items-center gap-1">
+            {[0, 1].map((idx) => {
+              const badge =
+                selected.track === 'clips'
+                  ? `V${idx + 1}`
+                  : selected.track === 'overlays'
+                  ? `T${idx + 1}`
+                  : `Z${idx + 1}`;
+              const isCurrent = (itemData.trackIndex || 0) === idx;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (selected.track === 'clips') {
+                      const updated = (project.clips || []).map((c) =>
+                        c.id === selected.id ? { ...c, trackIndex: idx } : c
+                      );
+                      setProject({ ...project, clips: updated });
+                    } else {
+                      updateItem(selected.track as any, selected.id, { trackIndex: idx });
+                    }
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition cursor-pointer ${
+                    isCurrent
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400'
+                  }`}
+                >
+                  {badge}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Property Controls Depending on Type */}
       {selected.track === 'overlays' && (
         <div className="flex flex-col gap-2 pt-1 text-xs">

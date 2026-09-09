@@ -27,6 +27,7 @@ export interface TextOverlay {
   paddingY?: number;      // Vertical padding around text (default 12)
   borderRadius?: number;  // Rounded corner radius (default 12)
   animation?: 'pop' | 'fade' | 'slide_up' | 'none';
+  trackIndex?: number;    // 0 = T1 (primary text/screen), 1 = T2 (secondary stacked text), etc.
 }
 
 // Backwards-compatible alias for existing codebase
@@ -52,6 +53,7 @@ export interface VideoClip {
   endSec: number;          // End timecode on master timeline
   clipDurationSec: number; // Native file duration
   inPointSec?: number;     // Start trim offset within source
+  trackIndex?: number;     // 0 = V1 (main video), 1 = V2 (overlay/B-roll), etc.
 }
 
 export interface Cut {
@@ -74,6 +76,7 @@ export interface Zoom {
   transition?: ZoomTransition;
   anchorX?: number; // Normalized 0-1, default 0.5
   anchorY?: number; // Normalized 0-1, default 0.5
+  trackIndex?: number; // 0 = Z1 (primary camera zoom), 1 = Z2, etc.
 }
 
 export interface CaptionsConfig {
@@ -84,6 +87,12 @@ export interface CaptionsConfig {
   position_y_offset?: number;
 }
 
+export interface ProjectTrackConfig {
+  videoTrackCount: number;   // Default 2 (V1, V2)
+  overlayTrackCount: number; // Default 2 (T1, T2)
+  zoomTrackCount: number;    // Default 1 (Z1)
+}
+
 export interface VideoProjectState {
   id: string;
   title: string;
@@ -92,11 +101,12 @@ export interface VideoProjectState {
   fps: number;
   width: number;
   height: number;
-  clips?: VideoClip[];
+  clips: VideoClip[];
   cuts: Cut[];
   overlays: TextOverlay[];
   zooms: Zoom[];
   captions?: CaptionsConfig;
+  trackConfig?: ProjectTrackConfig;
 }
 
 export type TimelineTrackType = 'clips' | 'cuts' | 'overlays' | 'zooms';

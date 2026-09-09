@@ -29,15 +29,19 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({ state }) => 
       ? 'none'
       : 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)';
 
-  // Active text overlays
-  const activeOverlays = getActiveOverlays(currentTime, state.overlays);
-
-  // Active cut indicator
-  const activeCut = getActiveCut(currentTime, state.cuts);
+  // Active text overlays sorted by track layer (T1 base, T2 on top)
+  const activeOverlays = getActiveOverlays(currentTime, state.overlays).sort(
+    (a, b) => (a.trackIndex || 0) - (b.trackIndex || 0)
+  );
 
   // Dynamic captions
   const captions = state.captions;
   const showCaptions = captions?.enabled;
+
+  // Video clips sorted by track layer (V1 base, V2 on top)
+  const sortedClips = [...(state.clips || [])].sort(
+    (a, b) => (a.trackIndex || 0) - (b.trackIndex || 0)
+  );
 
   return (
     <AbsoluteFill className="bg-black select-none overflow-hidden font-sans">
@@ -52,8 +56,8 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({ state }) => 
         }}
         className="relative flex items-center justify-center w-full h-full"
       >
-        {state.clips && state.clips.length > 0 ? (
-          state.clips.map((clip) => {
+        {sortedClips.length > 0 ? (
+          sortedClips.map((clip) => {
             const fromFrame = Math.round(clip.startSec * fps);
             const durationInFrames = Math.max(1, Math.round((clip.endSec - clip.startSec) * fps));
             const startFromFrame = Math.round((clip.inPointSec || 0) * fps);
@@ -82,15 +86,6 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({ state }) => 
           />
         )}
       </div>
-
-      {/* Dead Air / Cut Indicator Overlay */}
-      {activeCut && (
-        <div className="absolute inset-0 bg-red-950/40 backdrop-blur-[2px] border-4 border-red-500/80 flex items-center justify-center pointer-events-none z-30">
-          <div className="bg-red-600/90 text-white px-4 py-2 rounded-lg font-bold text-sm tracking-wide uppercase shadow-lg shadow-red-950/60 flex items-center gap-2">
-            <span>✂️ Cut Segment ({activeCut.reason || 'Dead Air'})</span>
-          </div>
-        </div>
-      )}
 
       {/* Dynamic Captions Subtitles Layer */}
       {showCaptions && (

@@ -3,7 +3,7 @@
 import { usePromptChat } from '@/composables/usePromptChat';
 import { UseVideoEditorReturn } from '@/composables/useVideoEditor';
 import { Loader2, MessageSquare, Send, Sparkles } from 'lucide-react';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface PromptInputProps {
   editor: UseVideoEditorReturn;
@@ -22,25 +22,26 @@ export const PromptInput: React.FC<PromptInputProps> = ({ editor }) => {
   const [inputText, setInputText] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll chat to latest message on new messages or loading state change
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || isLoading) return;
     const text = inputText;
     setInputText('');
     await submitPrompt(text);
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleQuickPrompt = async (prompt: string) => {
     setInputText(prompt);
     await submitPrompt(prompt);
-    setTimeout(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
+    <div className="flex flex-col h-full max-h-full min-h-0 bg-zinc-950 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
       {/* Header */}
       <div className="px-5 py-3 border-b border-zinc-800/60 bg-zinc-900/50 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -55,7 +56,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({ editor }) => {
       </div>
 
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 min-h-0 overscroll-contain">
         {messages.map((msg) => (
           <div
             key={msg.id}

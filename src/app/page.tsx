@@ -61,19 +61,19 @@ export default function Home() {
       {/* Main Workspace Area */}
       <div className="flex-1 p-5 flex flex-col gap-5 max-w-[1600px] mx-auto w-full">
         {/* Upper Studio: Media Bin (Left) + Player (Center) + Copilot Chat (Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-[520px]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-auto lg:h-[520px] max-h-[520px] min-h-0">
           {/* Column 1: Media Bin & Uploads */}
-          <div className="lg:col-span-3 h-full">
+          <div className="lg:col-span-3 h-full min-h-0 overflow-hidden">
             <MediaBin editor={editor} />
           </div>
 
           {/* Column 2: Video Player with Direct Canvas Drag */}
-          <div className="lg:col-span-5 h-full flex flex-col">
+          <div className="lg:col-span-5 h-full min-h-0 flex flex-col overflow-hidden">
             <RemotionPlayer editor={editor} />
           </div>
 
           {/* Column 3: AI Timeline Copilot (Full Height) */}
-          <div className="lg:col-span-4 h-full">
+          <div className="lg:col-span-4 h-full min-h-0 flex flex-col overflow-hidden">
             <PromptInput editor={editor} />
           </div>
         </div>

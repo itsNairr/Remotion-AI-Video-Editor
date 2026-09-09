@@ -139,7 +139,10 @@ export async function exportProjectToMp4(
 
       const renderFrame = async (t: number) => {
         return new Promise<void>((frameDone) => {
-          const activeClip = clips.find((c) => c.startSec <= t && t < c.endSec) || clips[clips.length - 1];
+          const activeClipsAtTime = clips
+            .filter((c) => c.startSec <= t && t < c.endSec)
+            .sort((a, b) => (a.trackIndex || 0) - (b.trackIndex || 0));
+          const activeClip = activeClipsAtTime[activeClipsAtTime.length - 1] || clips[clips.length - 1];
           const clipVideo = videoMap.get(activeClip.sourceUrl) || primaryVideo;
           const localTime = Math.max(0, (t - activeClip.startSec) + (activeClip.inPointSec || 0));
 
@@ -169,7 +172,9 @@ export async function exportProjectToMp4(
             ctx.restore();
 
             // B. Active Overlays (1:1 identical to Remotion Preview)
-            const activeOverlays = getActiveOverlays(t, project.overlays);
+            const activeOverlays = getActiveOverlays(t, project.overlays).sort(
+              (a, b) => (a.trackIndex || 0) - (b.trackIndex || 0)
+            );
             for (const overlay of activeOverlays) {
               const metrics = computeTextMetrics(overlay, width, height, (text, font) => {
                 ctx.font = font;

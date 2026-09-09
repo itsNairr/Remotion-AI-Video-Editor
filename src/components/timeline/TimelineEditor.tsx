@@ -3,19 +3,21 @@
 import { UseVideoEditorReturn } from '@/composables/useVideoEditor';
 import { formatTimecode } from '@/utils/time';
 import {
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Film,
   Layers,
   Pause,
   Play,
+  Plus,
   RotateCcw,
   Scissors,
   Subtitles,
   Type,
   ZoomIn,
 } from 'lucide-react';
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { TimelineReceiptPopover } from './TimelineReceiptPopover';
 import { TimelineBlockItem, TimelineTrack } from './TimelineTrack';
 
@@ -24,45 +26,61 @@ interface TimelineEditorProps {
 }
 
 export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
-  const laneContainerRef = useRef<HTMLDivElement>(null);
+  const tracksLaneRef = useRef<HTMLDivElement>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [showAddTrackMenu, setShowAddTrackMenu] = useState(false);
 
   const {
     project,
     playhead,
-    updatePlayhead,
+    seekTo,
+    togglePlay,
+    splitClip,
     selectedElement,
     setSelectedElement,
-    nudgeItem,
     resetToSample,
+    addTrack,
+    removeTrack,
   } = editor;
 
   const totalDuration = Math.max(1, project.durationSec);
   const currentSec = playhead.currentSec;
-  const playheadPercent = (currentSec / totalDuration) * 100;
+  const playheadPercent = Math.max(0, Math.min(100, (currentSec / totalDuration) * 100));
+
+  // 'S' key shortcut for split at playhead
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        splitClip(currentSec);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentSec, splitClip]);
 
   // Handle Scrubbing on Timeline Ruler / Tracks
-  const handleScrub = useCallback(
-    (clientX: number) => {
-      const container = laneContainerRef.current;
-      if (!container) return;
+  const handleScrubStart = (e: React.MouseEvent) => {
+    const lane = tracksLaneRef.current;
+    if (!lane) return;
 
-      const rect = container.getBoundingClientRect();
-      const clickX = clientX - rect.left;
-      const percent = Math.max(0, Math.min(1, clickX / rect.width));
-      const newSec = Number((percent * totalDuration).toFixed(2));
-      updatePlayhead(newSec);
-    },
-    [totalDuration, updatePlayhead]
-  );
+    setIsScrubbing(true);
+    const rect = lane.getBoundingClientRect();
+    const updateTimeFromX = (clientX: number) => {
+      const offsetX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+      const targetSec = (offsetX / rect.width) * totalDuration;
+      seekTo(Number(targetSec.toFixed(2)));
+    };
 
-  const handleRulerMouseDown = (e: React.MouseEvent) => {
-    handleScrub(e.clientX);
+    updateTimeFromX(e.clientX);
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      handleScrub(moveEvent.clientX);
+      updateTimeFromX(moveEvent.clientX);
     };
 
     const onMouseUp = () => {
+      setIsScrubbing(false);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -71,61 +89,98 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Convert project entities into TimelineBlockItems
-  const clipItems: TimelineBlockItem[] = (
-    project.clips || [
-      {
-        id: 'clip_01',
-        name: project.title || 'Source Video',
-        sourceUrl: project.sourceUrl,
-        startSec: 0,
-        endSec: project.durationSec,
-        clipDurationSec: project.durationSec,
-      },
-    ]
-  ).map((c) => ({
-    id: c.id,
-    name: c.name,
-    startSec: c.startSec,
-    endSec: c.endSec,
-    colorClass: 'bg-blue-600/80 border-blue-400/60 text-white',
-    badge: `${(c.endSec - c.startSec).toFixed(1)}s`,
-  }));
+  const CLIP_COLOR_PALETTES = [
+    'bg-blue-600/85 border-blue-400/70 text-white',
+    'bg-indigo-600/85 border-indigo-400/70 text-white',
+    'bg-violet-600/85 border-violet-400/70 text-white',
+    'bg-sky-600/85 border-sky-400/70 text-white',
+  ];
 
-  const cutItems: TimelineBlockItem[] = project.cuts.map((c) => ({
-    id: c.id,
-    name: c.reason || 'Trimmed Dead Air',
-    startSec: c.startSec,
-    endSec: c.endSec,
-    colorClass: 'bg-red-600/80 border-red-400/60 text-white',
-    badge: 'Cut',
-    isCut: true,
-    trackType: 'cuts',
-  }));
+  // Dynamic Stacked Tracks Configuration
+  const videoTrackCount = Math.max(
+    project.trackConfig?.videoTrackCount || 2,
+    ...(project.clips || []).map((c) => (c.trackIndex || 0) + 1)
+  );
 
-  const overlayItems: TimelineBlockItem[] = project.overlays.map((o) => ({
-    id: o.id,
-    name: o.text || (o.isFullScreen ? (o.bgColor === '#ffffff' ? 'White Screen' : 'Color Screen') : 'Overlay'),
-    startSec: o.startSec,
-    endSec: o.endSec,
-    colorClass: o.isKnockout
-      ? 'bg-zinc-800 border-emerald-400/80 text-emerald-300'
-      : o.isFullScreen
-      ? 'bg-zinc-700 border-zinc-400 text-white'
-      : 'bg-emerald-600/80 border-emerald-400/60 text-white',
-    badge: o.isKnockout ? 'Knockout' : o.isFullScreen ? 'Full Screen' : o.placement,
-    trackType: 'overlays',
-  }));
+  const overlayTrackCount = Math.max(
+    project.trackConfig?.overlayTrackCount || 2,
+    ...project.overlays.map((o) => (o.trackIndex || 0) + 1)
+  );
 
-  const zoomItems: TimelineBlockItem[] = project.zooms.map((z) => ({
-    id: z.id,
-    name: `${Math.round(z.scale * 100)}% Zoom`,
-    startSec: z.startSec,
-    endSec: z.endSec,
-    colorClass: 'bg-amber-600/80 border-amber-400/60 text-white',
-    badge: z.target_anchor || 'center',
-    trackType: 'zooms',
-  }));
+  const zoomTrackCount = Math.max(
+    project.trackConfig?.zoomTrackCount || 1,
+    ...project.zooms.map((z) => (z.trackIndex || 0) + 1)
+  );
+
+  // Group clips into stacked video tracks
+  const videoTracks = Array.from({ length: videoTrackCount }, (_, vIdx) => {
+    const trackClips = (project.clips || []).filter((c) => (c.trackIndex || 0) === vIdx);
+    const items: TimelineBlockItem[] = trackClips.map((c, idx) => ({
+      id: c.id,
+      name: c.name || `Clip ${idx + 1}`,
+      startSec: c.startSec,
+      endSec: c.endSec,
+      colorClass: CLIP_COLOR_PALETTES[(idx + vIdx * 2) % CLIP_COLOR_PALETTES.length],
+      badge: `${(c.endSec - c.startSec).toFixed(1)}s`,
+      trackType: 'clips',
+      trackIndex: vIdx,
+    }));
+    return {
+      index: vIdx,
+      title: vIdx === 0 ? 'Video Track' : `Video Overlay`,
+      badge: `V${vIdx + 1}`,
+      items,
+      canDelete: vIdx > 0 && trackClips.length === 0,
+    };
+  });
+
+  // Group overlays into stacked text & screens tracks
+  const overlayTracks = Array.from({ length: overlayTrackCount }, (_, tIdx) => {
+    const trackOverlays = project.overlays.filter((o) => (o.trackIndex || 0) === tIdx);
+    const items: TimelineBlockItem[] = trackOverlays.map((o) => ({
+      id: o.id,
+      name: o.text || (o.isFullScreen ? (o.bgColor === '#ffffff' ? 'White Screen' : 'Color Screen') : 'Overlay'),
+      startSec: o.startSec,
+      endSec: o.endSec,
+      colorClass: o.isKnockout
+        ? 'bg-zinc-800 border-emerald-400/80 text-emerald-300'
+        : o.isFullScreen
+        ? 'bg-zinc-700 border-zinc-400 text-white'
+        : 'bg-emerald-600/80 border-emerald-400/60 text-white',
+      badge: o.isKnockout ? 'Knockout' : o.isFullScreen ? 'Full Screen' : o.placement,
+      trackType: 'overlays',
+      trackIndex: tIdx,
+    }));
+    return {
+      index: tIdx,
+      title: tIdx === 0 ? 'Text & Screens' : `Text & Screens`,
+      badge: `T${tIdx + 1}`,
+      items,
+      canDelete: tIdx > 0 && trackOverlays.length === 0,
+    };
+  });
+
+  // Group zooms into stacked zoom tracks
+  const zoomTracks = Array.from({ length: zoomTrackCount }, (_, zIdx) => {
+    const trackZooms = project.zooms.filter((z) => (z.trackIndex || 0) === zIdx);
+    const items: TimelineBlockItem[] = trackZooms.map((z) => ({
+      id: z.id,
+      name: `${Math.round(z.scale * 100)}% Zoom`,
+      startSec: z.startSec,
+      endSec: z.endSec,
+      colorClass: 'bg-amber-600/80 border-amber-400/60 text-white',
+      badge: z.target_anchor || 'center',
+      trackType: 'zooms',
+      trackIndex: zIdx,
+    }));
+    return {
+      index: zIdx,
+      title: 'Camera Zooms',
+      badge: `Z${zIdx + 1}`,
+      items,
+      canDelete: zIdx > 0 && trackZooms.length === 0,
+    };
+  });
 
   const captionsItem: TimelineBlockItem[] = project.captions?.enabled
     ? [
@@ -145,12 +200,12 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
     setSelectedElement({ track, id });
   };
 
-  const handleMoveItem = (track: any, id: string, startSec: number, endSec: number) => {
-    editor.moveItem(track, id, startSec, endSec);
+  const handleMoveItem = (track: any, id: string, startSec: number, endSec: number, newTrackIndex?: number) => {
+    editor.moveItem(track, id, startSec, endSec, newTrackIndex);
   };
 
-  const handleTrimItem = (track: any, id: string, startSec: number, endSec: number) => {
-    editor.trimItem(track, id, startSec, endSec);
+  const handleTrimItem = (track: any, id: string, startSec: number, endSec: number, newTrackIndex?: number) => {
+    editor.trimItem(track, id, startSec, endSec, newTrackIndex);
   };
 
   return (
@@ -174,8 +229,74 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
 
         {/* Quick Transport Controls */}
         <div className="flex items-center gap-2">
+          {/* Split at Playhead Razor Tool */}
           <button
-            onClick={() => updatePlayhead(Math.max(0, currentSec - 1.0))}
+            onClick={() => splitClip(currentSec)}
+            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-emerald-400 hover:text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-zinc-700/60 shadow-sm cursor-pointer"
+            title="Split video clip at playhead position (or press 'S')"
+          >
+            <Scissors size={13} className="text-emerald-400" />
+            <span>Split</span>
+          </button>
+
+          {/* Add Stacked Track Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowAddTrackMenu(!showAddTrackMenu)}
+              className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition border border-zinc-700/60 shadow-sm cursor-pointer"
+              title="Add a new stacked track lane"
+            >
+              <Plus size={13} className="text-emerald-400" />
+              <span>Track</span>
+              <ChevronDown size={11} className="text-zinc-500" />
+            </button>
+
+            {showAddTrackMenu && (
+              <div
+                className="absolute left-0 top-full mt-1.5 w-48 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-1 z-50 flex flex-col backdrop-blur-md"
+                onMouseLeave={() => setShowAddTrackMenu(false)}
+              >
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                  Add Stacked Track
+                </div>
+                <button
+                  onClick={() => {
+                    addTrack('clips');
+                    setShowAddTrackMenu(false);
+                  }}
+                  className="px-3 py-1.5 hover:bg-zinc-800 flex items-center gap-2 text-xs text-left text-zinc-200 hover:text-blue-400 transition cursor-pointer"
+                >
+                  <Film size={12} className="text-blue-400" />
+                  <span>+ Video Track (Overlay)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    addTrack('overlays');
+                    setShowAddTrackMenu(false);
+                  }}
+                  className="px-3 py-1.5 hover:bg-zinc-800 flex items-center gap-2 text-xs text-left text-zinc-200 hover:text-emerald-400 transition cursor-pointer"
+                >
+                  <Type size={12} className="text-emerald-400" />
+                  <span>+ Text & Screen Track</span>
+                </button>
+                <button
+                  onClick={() => {
+                    addTrack('zooms');
+                    setShowAddTrackMenu(false);
+                  }}
+                  className="px-3 py-1.5 hover:bg-zinc-800 flex items-center gap-2 text-xs text-left text-zinc-200 hover:text-amber-400 transition cursor-pointer"
+                >
+                  <ZoomIn size={12} className="text-amber-400" />
+                  <span>+ Camera Zoom Track</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="w-[1px] h-4 bg-zinc-800 mx-0.5" />
+
+          <button
+            onClick={() => seekTo(Math.max(0, currentSec - 1.0))}
             className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
             title="Step Back 1s"
           >
@@ -183,7 +304,7 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
           </button>
 
           <button
-            onClick={() => updatePlayhead(currentSec, !playhead.isPlaying)}
+            onClick={togglePlay}
             className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
           >
             {playhead.isPlaying ? <Pause size={13} /> : <Play size={13} />}
@@ -191,7 +312,7 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
           </button>
 
           <button
-            onClick={() => updatePlayhead(Math.min(totalDuration, currentSec + 1.0))}
+            onClick={() => seekTo(Math.min(totalDuration, currentSec + 1.0))}
             className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
             title="Step Forward 1s"
           >
@@ -221,12 +342,11 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
 
           {/* Scrubbable Time Ruler */}
           <div
-            ref={laneContainerRef}
-            onMouseDown={handleRulerMouseDown}
-            className="flex-1 h-full relative cursor-pointer overflow-hidden"
+            onMouseDown={handleScrubStart}
+            className="flex-1 h-full relative cursor-pointer overflow-hidden group"
           >
             {/* Ticks */}
-            <div className="absolute inset-0 flex justify-between px-2 items-center pointer-events-none">
+            <div className="absolute inset-0 flex justify-between px-2 items-center pointer-events-none text-zinc-500">
               <span>00:00</span>
               <span>{formatTimecode(totalDuration * 0.25)}</span>
               <span>{formatTimecode(totalDuration * 0.5)}</span>
@@ -238,61 +358,110 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({ editor }) => {
 
         {/* Stacked Tracks Container */}
         <div className="flex flex-col relative">
-          {/* Playhead Needle (Sweeps across all tracks) */}
+          {/* Overlay container covering EXACTLY the tracks lane (left-36 right-0) */}
           <div
-            style={{ left: `calc(9rem + ${playheadPercent}% * (100% - 9rem) / 100)` }}
-            className="absolute top-0 bottom-0 z-30 pointer-events-none flex flex-col items-center -ml-[1px]"
+            ref={tracksLaneRef}
+            className="absolute top-0 bottom-0 left-36 right-0 pointer-events-none z-30"
           >
-            {/* Needle Head */}
-            <div className="w-3 h-2 bg-emerald-500 rounded-b shadow-md -mt-7" />
-            {/* Line */}
-            <div className="w-[2px] h-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+            {/* Draggable Playhead Needle */}
+            <div
+              style={{ left: `${playheadPercent}%` }}
+              onMouseDown={handleScrubStart}
+              className="absolute top-0 bottom-0 -ml-[8px] w-[16px] flex flex-col items-center pointer-events-auto cursor-ew-resize select-none group"
+            >
+              {/* Playhead Needle Head - Sits in the Ruler bar above */}
+              <div
+                className={`w-4 h-7 -mt-7 bg-emerald-500 hover:bg-emerald-400 rounded-b shadow-lg flex flex-col items-center justify-center gap-0.5 transition-all cursor-grab active:cursor-grabbing border border-emerald-300/50 ${
+                  isScrubbing ? 'scale-110 bg-emerald-400 ring-2 ring-emerald-300/80' : ''
+                }`}
+                title={`Playhead: ${formatTimecode(currentSec)} (Drag to scrub)`}
+              >
+                <div className="w-1.5 h-[1px] bg-white/80 rounded-full" />
+                <div className="w-1.5 h-[1px] bg-white/80 rounded-full" />
+                <div className="w-1.5 h-[1px] bg-white/80 rounded-full" />
+              </div>
+
+              {/* Glowing Needle Line */}
+              <div
+                className={`w-[2px] flex-1 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] transition-colors ${
+                  isScrubbing ? 'bg-emerald-300 w-[2.5px]' : ''
+                }`}
+              />
+
+              {/* Floating timecode badge while scrubbing */}
+              {isScrubbing && (
+                <div className="absolute -top-12 px-2 py-0.5 bg-zinc-900 border border-emerald-500 text-emerald-400 text-[10px] font-mono font-bold rounded shadow-xl pointer-events-none whitespace-nowrap z-50">
+                  {formatTimecode(currentSec)}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Track 1: Unified Video Clips & Cut Regions */}
-          <TimelineTrack
-            title="Video Track"
-            icon={<Film size={13} className="text-blue-400" />}
-            trackType="clips"
-            items={clipItems}
-            secondaryItems={cutItems}
-            totalDuration={totalDuration}
-            selectedElement={selectedElement}
-            onSelect={handleSelect}
-            onMoveItem={handleMoveItem}
-            onTrimItem={handleTrimItem}
-          />
+          {/* Stacked Video Tracks */}
+          {videoTracks.map((vt) => (
+            <TimelineTrack
+              key={`vt_${vt.index}`}
+              title={vt.title}
+              trackBadge={vt.badge}
+              icon={<Film size={13} className="text-blue-400" />}
+              trackType="clips"
+              trackIndex={vt.index}
+              canDeleteTrack={vt.canDelete}
+              onDeleteTrack={() => removeTrack('clips', vt.index)}
+              items={vt.items}
+              totalDuration={totalDuration}
+              selectedElement={selectedElement}
+              onSelect={handleSelect}
+              onMoveItem={handleMoveItem}
+              onTrimItem={handleTrimItem}
+            />
+          ))}
 
-          {/* Track 2: Text Overlays & Full-Screen Screens */}
-          <TimelineTrack
-            title="Text & Screens"
-            icon={<Type size={13} className="text-emerald-400" />}
-            trackType="overlays"
-            items={overlayItems}
-            totalDuration={totalDuration}
-            selectedElement={selectedElement}
-            onSelect={handleSelect}
-            onMoveItem={handleMoveItem}
-            onTrimItem={handleTrimItem}
-          />
+          {/* Stacked Text & Screens Tracks */}
+          {overlayTracks.map((ot) => (
+            <TimelineTrack
+              key={`ot_${ot.index}`}
+              title={ot.title}
+              trackBadge={ot.badge}
+              icon={<Type size={13} className="text-emerald-400" />}
+              trackType="overlays"
+              trackIndex={ot.index}
+              canDeleteTrack={ot.canDelete}
+              onDeleteTrack={() => removeTrack('overlays', ot.index)}
+              items={ot.items}
+              totalDuration={totalDuration}
+              selectedElement={selectedElement}
+              onSelect={handleSelect}
+              onMoveItem={handleMoveItem}
+              onTrimItem={handleTrimItem}
+            />
+          ))}
 
-          {/* Track 3: Camera Zooms */}
-          <TimelineTrack
-            title="Camera Zooms"
-            icon={<ZoomIn size={13} className="text-amber-400" />}
-            trackType="zooms"
-            items={zoomItems}
-            totalDuration={totalDuration}
-            selectedElement={selectedElement}
-            onSelect={handleSelect}
-            onMoveItem={handleMoveItem}
-            onTrimItem={handleTrimItem}
-          />
+          {/* Stacked Camera Zooms Tracks */}
+          {zoomTracks.map((zt) => (
+            <TimelineTrack
+              key={`zt_${zt.index}`}
+              title={zt.title}
+              trackBadge={zt.badge}
+              icon={<ZoomIn size={13} className="text-amber-400" />}
+              trackType="zooms"
+              trackIndex={zt.index}
+              canDeleteTrack={zt.canDelete}
+              onDeleteTrack={() => removeTrack('zooms', zt.index)}
+              items={zt.items}
+              totalDuration={totalDuration}
+              selectedElement={selectedElement}
+              onSelect={handleSelect}
+              onMoveItem={handleMoveItem}
+              onTrimItem={handleTrimItem}
+            />
+          ))}
 
-          {/* Track 4: Dynamic Captions */}
+          {/* Track: Dynamic Captions */}
           {captionsItem.length > 0 && (
             <TimelineTrack
               title="Captions"
+              trackBadge="CC"
               icon={<Subtitles size={13} className="text-teal-400" />}
               trackType="captions"
               items={captionsItem}

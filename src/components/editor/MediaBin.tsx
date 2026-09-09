@@ -90,7 +90,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({ editor }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
+    <div className="flex flex-col h-full max-h-full min-h-0 bg-zinc-950 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-800/60 bg-zinc-900/50 flex items-center justify-between">
         <div className="flex items-center gap-2">

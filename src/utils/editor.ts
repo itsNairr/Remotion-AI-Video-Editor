@@ -1,4 +1,4 @@
-import { Cut, TextOverlay, Zoom } from '@/types/editor';
+import { Cut, TextOverlay, VideoClip, Zoom } from '@/types/editor';
 
 /**
  * Checks if the current playback time falls inside any cut dead air/segment
@@ -97,4 +97,139 @@ export function nudgeTrackItem<T extends { id: string; startSec: number; endSec:
       return { ...item, endSec: Number(nextEnd.toFixed(2)) };
     }
   });
+}
+
+/**
+ * Splits a video clip at a specified timecode into two separate sequential clips.
+ * Preserves the source file inPointSec offsets accurately so video plays continuously.
+ */
+export function splitClipAtTime(
+  clips: VideoClip[],
+  splitTimeSec: number,
+  targetTrackIndex?: number
+): { clips: VideoClip[]; splitSuccess: boolean; splitClipId?: string } {
+  const targetIndex = clips.findIndex((c) => {
+    const matchesTrack = targetTrackIndex === undefined || (c.trackIndex || 0) === targetTrackIndex;
+    return matchesTrack && splitTimeSec > c.startSec + 0.05 && splitTimeSec < c.endSec - 0.05;
+  });
+
+  if (targetIndex === -1) {
+    return { clips, splitSuccess: false };
+  }
+
+  const target = clips[targetIndex];
+  const offsetFromClipStart = splitTimeSec - target.startSec;
+  const currentInPoint = target.inPointSec || 0;
+
+  const baseName = target.name.replace(/\s*\((Part \d+|Split \d+)\)$/i, '');
+
+  const part1: VideoClip = {
+    ...target,
+    id: `clip_${Date.now()}_a`,
+    name: `${baseName} (Part 1)`,
+    startSec: Number(target.startSec.toFixed(2)),
+    endSec: Number(splitTimeSec.toFixed(2)),
+    clipDurationSec: target.clipDurationSec,
+    inPointSec: Number(currentInPoint.toFixed(2)),
+    trackIndex: target.trackIndex || 0,
+  };
+
+  const part2: VideoClip = {
+    ...target,
+    id: `clip_${Date.now()}_b`,
+    name: `${baseName} (Part 2)`,
+    startSec: Number(splitTimeSec.toFixed(2)),
+    endSec: Number(target.endSec.toFixed(2)),
+    clipDurationSec: target.clipDurationSec,
+    inPointSec: Number((currentInPoint + offsetFromClipStart).toFixed(2)),
+    trackIndex: target.trackIndex || 0,
+  };
+
+  const updatedClips = [...clips];
+  updatedClips.splice(targetIndex, 1, part1, part2);
+
+  return {
+    clips: updatedClips.sort((a, b) => a.startSec - b.startSec),
+    splitSuccess: true,
+    splitClipId: part2.id,
+  };
+}
+
+/**
+ * Slices out a range [startSec, endSec] from the clips collection,
+ * removing dead air and rippling subsequent clips forward to close the gap.
+ */
+export function cutRangeFromClips(
+  clips: VideoClip[],
+  startSec: number,
+  endSec: number
+): { clips: VideoClip[]; newDurationSec: number } {
+  if (startSec >= endSec) return { clips, newDurationSec: Math.max(...clips.map((c) => c.endSec), 0) };
+
+  const cutDuration = endSec - startSec;
+  const newClips: VideoClip[] = [];
+
+  for (const clip of clips) {
+    // 1. Clip completely before cut range
+    if (clip.endSec <= startSec) {
+      newClips.push({ ...clip });
+    }
+    // 2. Clip completely after cut range -> ripple backwards by cutDuration
+    else if (clip.startSec >= endSec) {
+      newClips.push({
+        ...clip,
+        startSec: Number((clip.startSec - cutDuration).toFixed(2)),
+        endSec: Number((clip.endSec - cutDuration).toFixed(2)),
+      });
+    }
+    // 3. Cut falls completely inside this clip -> split into 2 and drop the middle
+    else if (clip.startSec < startSec && clip.endSec > endSec) {
+      const inPoint = clip.inPointSec || 0;
+      const part1: VideoClip = {
+        ...clip,
+        id: `clip_${Date.now()}_1`,
+        name: `${clip.name.replace(/\s*\((Part \d+)\)$/i, '')} (Part 1)`,
+        startSec: Number(clip.startSec.toFixed(2)),
+        endSec: Number(startSec.toFixed(2)),
+        inPointSec: Number(inPoint.toFixed(2)),
+      };
+      const part2: VideoClip = {
+        ...clip,
+        id: `clip_${Date.now()}_2`,
+        name: `${clip.name.replace(/\s*\((Part \d+)\)$/i, '')} (Part 2)`,
+        startSec: Number(startSec.toFixed(2)),
+        endSec: Number((clip.endSec - cutDuration).toFixed(2)),
+        inPointSec: Number((inPoint + (endSec - clip.startSec)).toFixed(2)),
+      };
+      newClips.push(part1, part2);
+    }
+    // 4. Cut overlaps start of this clip
+    else if (clip.startSec >= startSec && clip.endSec > endSec) {
+      const inPoint = clip.inPointSec || 0;
+      const trimmedStartSec = startSec;
+      const trimmedEndSec = clip.endSec - cutDuration;
+      const newInPoint = inPoint + (endSec - clip.startSec);
+      newClips.push({
+        ...clip,
+        startSec: Number(trimmedStartSec.toFixed(2)),
+        endSec: Number(trimmedEndSec.toFixed(2)),
+        inPointSec: Number(newInPoint.toFixed(2)),
+      });
+    }
+    // 5. Cut overlaps end of this clip
+    else if (clip.startSec < startSec && clip.endSec <= endSec) {
+      newClips.push({
+        ...clip,
+        endSec: Number(startSec.toFixed(2)),
+      });
+    }
+    // 6. Clip is completely engulfed by the cut -> omit (deleted)
+  }
+
+  const sorted = newClips.sort((a, b) => a.startSec - b.startSec);
+  const newDuration = sorted.length > 0 ? Math.max(...sorted.map((c) => c.endSec)) : 0;
+  return {
+    clips: sorted,
+    newDurationSec: Number(newDuration.toFixed(2)),
+  };
 }

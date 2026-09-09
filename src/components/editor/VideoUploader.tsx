@@ -29,14 +29,26 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ editor }) => {
       const width = tempVideo.videoWidth || 1280;
       const height = tempVideo.videoHeight || 720;
 
+      const clipDurationSec = Math.round(duration);
       editor.setProject({
         id: `proj_${Date.now()}`,
         title: file.name.replace(/\.[^/.]+$/, ''),
         sourceUrl: objectUrl,
-        durationSec: Math.round(duration),
+        durationSec: clipDurationSec,
         fps: 30,
         width,
         height,
+        clips: [
+          {
+            id: `clip_${Date.now()}`,
+            name: file.name.replace(/\.[^/.]+$/, ''),
+            sourceUrl: objectUrl,
+            startSec: 0,
+            endSec: clipDurationSec,
+            clipDurationSec,
+            inPointSec: 0,
+          },
+        ],
         cuts: [],
         overlays: [],
         zooms: [],

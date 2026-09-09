@@ -1,7 +1,7 @@
 'use client';
 
 import { SelectedElement, TimelineTrackType } from '@/types';
-import { Scissors } from 'lucide-react';
+import { Scissors, Trash2 } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 
 export interface TimelineBlockItem {
@@ -13,27 +13,34 @@ export interface TimelineBlockItem {
   badge?: string;
   trackType?: TimelineTrackType | 'captions';
   isCut?: boolean;
+  trackIndex?: number;
 }
 
 interface TimelineTrackProps {
   title: string;
   icon: React.ReactNode;
   trackType: TimelineTrackType | 'captions';
+  trackIndex?: number;
+  trackBadge?: string;
+  canDeleteTrack?: boolean;
+  onDeleteTrack?: () => void;
   items: TimelineBlockItem[];
-  secondaryItems?: TimelineBlockItem[]; // Overlaid items on this track, e.g. Cut segments on the Video track
   totalDuration: number;
   selectedElement: SelectedElement | null;
   onSelect: (track: any, id: string) => void;
-  onMoveItem?: (track: any, id: string, startSec: number, endSec: number) => void;
-  onTrimItem?: (track: any, id: string, startSec: number, endSec: number) => void;
+  onMoveItem?: (track: any, id: string, startSec: number, endSec: number, newTrackIndex?: number) => void;
+  onTrimItem?: (track: any, id: string, startSec: number, endSec: number, newTrackIndex?: number) => void;
 }
 
 export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   title,
   icon,
   trackType,
+  trackIndex = 0,
+  trackBadge,
+  canDeleteTrack,
+  onDeleteTrack,
   items,
-  secondaryItems,
   totalDuration,
   selectedElement,
   onSelect,
@@ -127,49 +134,6 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
     const targetTrack = item.trackType || trackType;
     const isSelected = selectedElement?.id === item.id;
 
-    if (item.isCut) {
-      // Cut / Trim Hazard Striped Marker
-      return (
-        <div
-          key={item.id}
-          onMouseDown={(e) => handleItemMouseDown(e, item, targetTrack, 'move')}
-          style={{
-            left: `${leftPercent}%`,
-            width: `${widthPercent}%`,
-            backgroundImage:
-              'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.4), rgba(239, 68, 68, 0.4) 8px, rgba(153, 27, 27, 0.6) 8px, rgba(153, 27, 27, 0.6) 16px)',
-          }}
-          className={`absolute top-0.5 bottom-0.5 rounded-md px-1.5 flex items-center justify-between text-[10px] font-bold border-2 border-red-500 shadow-md cursor-grab active:cursor-grabbing select-none overflow-hidden z-20 transition-[shadow,border-color] ${
-            isSelected
-              ? 'ring-2 ring-white border-white scale-[1.01] shadow-xl'
-              : 'hover:border-red-400'
-          }`}
-          title={`Cut segment: ${currentStart.toFixed(1)}s → ${currentEnd.toFixed(1)}s (Click & drag to move or trim edges)`}
-        >
-          {/* Left Trim Handle */}
-          <div
-            onMouseDown={(e) => handleItemMouseDown(e, item, targetTrack, 'trim_start')}
-            className="w-2 h-full -ml-1 bg-red-500/80 hover:bg-white rounded-l cursor-ew-resize transition-all shrink-0 z-30"
-            title="Drag left handle to trim start"
-          />
-
-          <div className="flex items-center gap-1 truncate px-1 text-white drop-shadow">
-            <Scissors size={11} className="text-white shrink-0" />
-            <span className="truncate text-[10px] font-bold tracking-wider uppercase">
-              Cut ({currentStart.toFixed(1)}s - {currentEnd.toFixed(1)}s)
-            </span>
-          </div>
-
-          {/* Right Trim Handle */}
-          <div
-            onMouseDown={(e) => handleItemMouseDown(e, item, targetTrack, 'trim_end')}
-            className="w-2 h-full -mr-1 bg-red-500/80 hover:bg-white rounded-r cursor-ew-resize transition-all shrink-0 z-30"
-            title="Drag right handle to trim end"
-          />
-        </div>
-      );
-    }
-
     // Standard Video Clip or Overlay Block
     return (
       <div
@@ -223,9 +187,28 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   return (
     <div className="flex items-center h-10 border-b border-zinc-800/60 hover:bg-zinc-900/30 transition-colors group">
       {/* Track Header Label */}
-      <div className="w-36 shrink-0 px-3 flex items-center gap-2 border-r border-zinc-800/80 text-[11px] font-semibold text-zinc-300">
-        <span className="shrink-0">{icon}</span>
-        <span className="truncate">{title}</span>
+      <div className="w-36 shrink-0 px-3 flex items-center justify-between border-r border-zinc-800/80 text-[11px] font-semibold text-zinc-300">
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="shrink-0">{icon}</span>
+          <span className="truncate">{title}</span>
+          {trackBadge && (
+            <span className="px-1.5 py-0.5 bg-zinc-800/90 text-zinc-400 border border-zinc-700/60 rounded text-[9px] font-mono font-bold shrink-0">
+              {trackBadge}
+            </span>
+          )}
+        </div>
+        {canDeleteTrack && onDeleteTrack && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteTrack();
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 hover:bg-zinc-800 rounded transition cursor-pointer text-zinc-500 shrink-0"
+            title="Delete this track"
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
       </div>
 
       {/* Track Canvas Lane */}
@@ -234,10 +217,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
         className="flex-1 h-full relative overflow-hidden bg-zinc-950/40"
       >
         {/* Primary Track Items (e.g. Video Clips or Overlays) */}
-        {items.map((item) => renderBlock(item, false))}
-
-        {/* Secondary Overlaid Items (e.g. Cuts on top of the Video Track) */}
-        {secondaryItems && secondaryItems.map((item) => renderBlock(item, true))}
+        {items.map((item) => renderBlock(item))}
       </div>
     </div>
   );

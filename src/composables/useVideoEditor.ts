@@ -16,11 +16,14 @@ import {
 import {
   addTrackItem,
   clamp,
+  cutRangeFromClips,
   nudgeTrackItem,
   removeTrackItem,
+  splitClipAtTime,
   updateTrackItem,
 } from '@/utils/editor';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import type { PlayerRef } from '@remotion/player';
 
 export const INITIAL_SAMPLE_ASSETS: MediaAsset[] = [
   {
@@ -57,26 +60,36 @@ export const INITIAL_SAMPLE_PROJECT: VideoProjectState = {
   fps: 30,
   width: 1280,
   height: 720,
+  trackConfig: {
+    videoTrackCount: 2,
+    overlayTrackCount: 2,
+    zoomTrackCount: 1,
+  },
   clips: [
     {
-      id: 'clip_01',
+      id: 'clip_01a',
       assetId: 'asset_sample_1',
-      name: 'sample-video.mp4',
+      name: 'sample-video.mp4 (Part 1)',
       sourceUrl: '/sample-video.mp4',
       startSec: 0,
-      endSec: 20,
+      endSec: 8.0,
       clipDurationSec: 20,
       inPointSec: 0,
+      trackIndex: 0,
     },
-  ],
-  cuts: [
     {
-      id: 'cut_01',
+      id: 'clip_01b',
+      assetId: 'asset_sample_1',
+      name: 'sample-video.mp4 (Part 2)',
+      sourceUrl: '/sample-video.mp4',
       startSec: 8.0,
-      endSec: 11.5,
-      reason: 'Trimmed filler pause',
+      endSec: 20.0,
+      clipDurationSec: 20,
+      inPointSec: 8.0,
+      trackIndex: 0,
     },
   ],
+  cuts: [],
   overlays: [
     {
       id: 'overlay_01',
@@ -89,6 +102,7 @@ export const INITIAL_SAMPLE_PROJECT: VideoProjectState = {
       fontFamily: 'Inter, system-ui, sans-serif',
       fontSize: 24,
       fontWeight: 'bold',
+      trackIndex: 0,
     },
   ],
   zooms: [
@@ -101,6 +115,7 @@ export const INITIAL_SAMPLE_PROJECT: VideoProjectState = {
       transition: 'smooth_ease_in',
       anchorX: 0.5,
       anchorY: 0.35,
+      trackIndex: 0,
     },
   ],
 };
@@ -109,6 +124,8 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
   const [project, setProject] = useState<VideoProjectState>(initialProject);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(INITIAL_SAMPLE_ASSETS);
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
+
+  const playerRef = useRef<PlayerRef>(null);
 
   const [playhead, setPlayhead] = useState<PlayheadContext>({
     currentSec: 0,
@@ -121,21 +138,76 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
       const clampedSec = clamp(sec, 0, project.durationSec);
       const frame = Math.round(clampedSec * project.fps);
 
-      setPlayhead((prev) => ({
-        currentSec: clampedSec,
-        currentFrame: frame,
-        isPlaying: isPlaying !== undefined ? isPlaying : prev.isPlaying,
-      }));
+      setPlayhead((prev) => {
+        const nextPlaying = isPlaying !== undefined ? isPlaying : prev.isPlaying;
+        if (
+          Math.abs(prev.currentSec - clampedSec) < 0.001 &&
+          prev.currentFrame === frame &&
+          prev.isPlaying === nextPlaying
+        ) {
+          return prev;
+        }
+        return {
+          currentSec: clampedSec,
+          currentFrame: frame,
+          isPlaying: nextPlaying,
+        };
+      });
     },
     [project.durationSec, project.fps]
   );
+
+  const seekTo = useCallback(
+    (sec: number) => {
+      const clampedSec = clamp(sec, 0, project.durationSec);
+      const frame = Math.round(clampedSec * project.fps);
+      if (playerRef.current) {
+        playerRef.current.seekTo(frame);
+      }
+      updatePlayhead(clampedSec);
+    },
+    [project.durationSec, project.fps, updatePlayhead]
+  );
+
+  const play = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.play();
+    }
+    setPlayhead((prev) => ({ ...prev, isPlaying: true }));
+  }, []);
+
+  const pause = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.pause();
+    }
+    setPlayhead((prev) => ({ ...prev, isPlaying: false }));
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    if (playerRef.current) {
+      if (playerRef.current.isPlaying()) {
+        playerRef.current.pause();
+        setPlayhead((prev) => ({ ...prev, isPlaying: false }));
+      } else {
+        playerRef.current.play();
+        setPlayhead((prev) => ({ ...prev, isPlaying: true }));
+      }
+    } else {
+      setPlayhead((prev) => ({ ...prev, isPlaying: !prev.isPlaying }));
+    }
+  }, []);
 
   const addMediaAsset = useCallback((asset: MediaAsset) => {
     setMediaAssets((prev) => [asset, ...prev]);
   }, []);
 
   const stitchClipToTimeline = useCallback(
-    (asset: MediaAsset, position: 'start' | 'end' | 'at_playhead' | 'custom' = 'end', customTimeSec?: number) => {
+    (
+      asset: MediaAsset,
+      position: 'start' | 'end' | 'at_playhead' | 'custom' = 'end',
+      customTimeSec?: number,
+      targetTrackIndex = 0
+    ) => {
       setProject((prev) => {
         const existingClips = prev.clips && prev.clips.length > 0 ? [...prev.clips] : [
           {
@@ -146,6 +218,7 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
             endSec: prev.durationSec,
             clipDurationSec: prev.durationSec,
             inPointSec: 0,
+            trackIndex: 0,
           },
         ];
 
@@ -157,8 +230,9 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
         } else if (position === 'custom' && customTimeSec !== undefined) {
           startSec = customTimeSec;
         } else {
-          // 'end'
-          const maxEnd = existingClips.length > 0 ? Math.max(...existingClips.map((c) => c.endSec)) : 0;
+          // 'end' of specified track
+          const trackClips = existingClips.filter((c) => (c.trackIndex || 0) === targetTrackIndex);
+          const maxEnd = trackClips.length > 0 ? Math.max(...trackClips.map((c) => c.endSec)) : 0;
           startSec = maxEnd;
         }
 
@@ -171,16 +245,21 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
           endSec: Number((startSec + asset.durationSec).toFixed(2)),
           clipDurationSec: asset.durationSec,
           inPointSec: 0,
+          trackIndex: targetTrackIndex,
         };
 
         let updatedClips = [...existingClips];
-        if (position === 'start') {
-          // Shift all existing clips forward by asset.durationSec
-          updatedClips = existingClips.map((c) => ({
-            ...c,
-            startSec: Number((c.startSec + asset.durationSec).toFixed(2)),
-            endSec: Number((c.endSec + asset.durationSec).toFixed(2)),
-          }));
+        if (position === 'start' && targetTrackIndex === 0) {
+          // Shift all existing V1 clips forward by asset.durationSec
+          updatedClips = existingClips.map((c) =>
+            (c.trackIndex || 0) === 0
+              ? {
+                  ...c,
+                  startSec: Number((c.startSec + asset.durationSec).toFixed(2)),
+                  endSec: Number((c.endSec + asset.durationSec).toFixed(2)),
+                }
+              : c
+          );
           updatedClips.unshift(newClip);
         } else {
           updatedClips.push(newClip);
@@ -192,15 +271,128 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
           prev.durationSec
         );
 
+        const currentTracks = prev.trackConfig?.videoTrackCount || 2;
+        const newTrackCount = Math.max(currentTracks, targetTrackIndex + 1);
+
         return {
           ...prev,
           clips: updatedClips,
           durationSec: Number(newTotalDuration.toFixed(2)),
+          trackConfig: {
+            videoTrackCount: newTrackCount,
+            overlayTrackCount: prev.trackConfig?.overlayTrackCount || 2,
+            zoomTrackCount: prev.trackConfig?.zoomTrackCount || 1,
+          },
         };
       });
     },
     [playhead.currentSec]
   );
+
+  // ---------------------------------------------------------------------------
+  // Stacked Track Management API
+  // ---------------------------------------------------------------------------
+
+  const addTrack = useCallback((category: 'clips' | 'overlays' | 'zooms') => {
+    setProject((prev) => {
+      const currentConfig = prev.trackConfig || {
+        videoTrackCount: 2,
+        overlayTrackCount: 2,
+        zoomTrackCount: 1,
+      };
+      if (category === 'clips') {
+        return {
+          ...prev,
+          trackConfig: {
+            ...currentConfig,
+            videoTrackCount: Math.min(5, currentConfig.videoTrackCount + 1),
+          },
+        };
+      }
+      if (category === 'overlays') {
+        return {
+          ...prev,
+          trackConfig: {
+            ...currentConfig,
+            overlayTrackCount: Math.min(5, currentConfig.overlayTrackCount + 1),
+          },
+        };
+      }
+      if (category === 'zooms') {
+        return {
+          ...prev,
+          trackConfig: {
+            ...currentConfig,
+            zoomTrackCount: Math.min(4, currentConfig.zoomTrackCount + 1),
+          },
+        };
+      }
+      return prev;
+    });
+  }, []);
+
+  const removeTrack = useCallback((category: 'clips' | 'overlays' | 'zooms', targetTrackIndex: number) => {
+    setProject((prev) => {
+      const currentConfig = prev.trackConfig || {
+        videoTrackCount: 2,
+        overlayTrackCount: 2,
+        zoomTrackCount: 1,
+      };
+
+      if (category === 'clips') {
+        const newCount = Math.max(1, currentConfig.videoTrackCount - 1);
+        const updatedClips = (prev.clips || []).map((c) => {
+          if ((c.trackIndex || 0) === targetTrackIndex) {
+            return { ...c, trackIndex: Math.max(0, targetTrackIndex - 1) };
+          }
+          if ((c.trackIndex || 0) > targetTrackIndex) {
+            return { ...c, trackIndex: (c.trackIndex || 0) - 1 };
+          }
+          return c;
+        });
+        return {
+          ...prev,
+          clips: updatedClips,
+          trackConfig: { ...currentConfig, videoTrackCount: newCount },
+        };
+      }
+      if (category === 'overlays') {
+        const newCount = Math.max(1, currentConfig.overlayTrackCount - 1);
+        const updatedOverlays = prev.overlays.map((o) => {
+          if ((o.trackIndex || 0) === targetTrackIndex) {
+            return { ...o, trackIndex: Math.max(0, targetTrackIndex - 1) };
+          }
+          if ((o.trackIndex || 0) > targetTrackIndex) {
+            return { ...o, trackIndex: (o.trackIndex || 0) - 1 };
+          }
+          return o;
+        });
+        return {
+          ...prev,
+          overlays: updatedOverlays,
+          trackConfig: { ...currentConfig, overlayTrackCount: newCount },
+        };
+      }
+      if (category === 'zooms') {
+        const newCount = Math.max(1, currentConfig.zoomTrackCount - 1);
+        const updatedZooms = prev.zooms.map((z) => {
+          if ((z.trackIndex || 0) === targetTrackIndex) {
+            return { ...z, trackIndex: Math.max(0, targetTrackIndex - 1) };
+          }
+          if ((z.trackIndex || 0) > targetTrackIndex) {
+            return { ...z, trackIndex: (z.trackIndex || 0) - 1 };
+          }
+          return z;
+        });
+        return {
+          ...prev,
+          zooms: updatedZooms,
+          trackConfig: { ...currentConfig, zoomTrackCount: newCount },
+        };
+      }
+      return prev;
+    });
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Generic Dynamic Track Helpers (Eliminates 16 redundant entity-specific methods)
@@ -244,13 +436,20 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
     track: TimelineTrackType,
     id: string,
     startSec: number,
-    endSec: number
+    endSec: number,
+    newTrackIndex?: number
   ) => {
     setProject((prev) => {
       if (track === 'clips') {
-        const clips = (prev.clips || []).map((c) =>
-          c.id === id ? { ...c, startSec: Number(startSec.toFixed(2)), endSec: Number(endSec.toFixed(2)) } : c
-        );
+        const clips = (prev.clips || []).map((c) => {
+          if (c.id !== id) return c;
+          return {
+            ...c,
+            startSec: Number(startSec.toFixed(2)),
+            endSec: Number(endSec.toFixed(2)),
+            ...(newTrackIndex !== undefined ? { trackIndex: newTrackIndex } : {}),
+          };
+        });
         clips.sort((a, b) => a.startSec - b.startSec);
         return {
           ...prev,
@@ -263,6 +462,7 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
         [track]: updateTrackItem(prev[track] as any[], id, {
           startSec: Number(startSec.toFixed(2)),
           endSec: Number(endSec.toFixed(2)),
+          ...(newTrackIndex !== undefined ? { trackIndex: newTrackIndex } : {}),
         }),
       };
     });
@@ -272,9 +472,10 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
     track: TimelineTrackType,
     id: string,
     startSec: number,
-    endSec: number
+    endSec: number,
+    newTrackIndex?: number
   ) => {
-    moveItem(track, id, startSec, endSec);
+    moveItem(track, id, startSec, endSec, newTrackIndex);
   }, [moveItem]);
 
   const nudgeItem = useCallback((
@@ -329,7 +530,70 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
     });
   }, []);
 
+  const splitClip = useCallback(
+    (timeSec?: number, targetTrackIndex?: number) => {
+      const splitAt = timeSec !== undefined ? timeSec : playhead.currentSec;
+      setProject((prev) => {
+        const existingClips =
+          prev.clips && prev.clips.length > 0
+            ? [...prev.clips]
+            : [
+                {
+                  id: 'clip_default',
+                  name: prev.title || 'Source Video',
+                  sourceUrl: prev.sourceUrl,
+                  startSec: 0,
+                  endSec: prev.durationSec,
+                  clipDurationSec: prev.durationSec,
+                  inPointSec: 0,
+                  trackIndex: 0,
+                },
+              ];
+
+        const result = splitClipAtTime(existingClips, splitAt, targetTrackIndex);
+        if (!result.splitSuccess) return prev;
+
+        return {
+          ...prev,
+          clips: result.clips,
+        };
+      });
+    },
+    [playhead.currentSec]
+  );
+
+  const cutRange = useCallback((startSec: number, endSec: number) => {
+    setProject((prev) => {
+      const existingClips =
+        prev.clips && prev.clips.length > 0
+          ? [...prev.clips]
+          : [
+              {
+                id: 'clip_default',
+                name: prev.title || 'Source Video',
+                sourceUrl: prev.sourceUrl,
+                startSec: 0,
+                endSec: prev.durationSec,
+                clipDurationSec: prev.durationSec,
+                inPointSec: 0,
+                trackIndex: 0,
+              },
+            ];
+
+      const result = cutRangeFromClips(existingClips, startSec, endSec);
+      return {
+        ...prev,
+        clips: result.clips,
+        durationSec: Math.max(result.newDurationSec, 1),
+      };
+    });
+  }, []);
+
   const resetToSample = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.pause();
+      playerRef.current.seekTo(0);
+    }
     setProject(INITIAL_SAMPLE_PROJECT);
     setPlayhead({ currentSec: 0, currentFrame: 0, isPlaying: false });
   }, []);
@@ -351,6 +615,11 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
   const nudgeZoom = useCallback((id: string, delta: number, edge: 'start' | 'end') => nudgeItem('zooms', id, delta, edge), [nudgeItem]);
 
   return {
+    playerRef,
+    play,
+    pause,
+    togglePlay,
+    seekTo,
     project,
     setProject,
     playhead,
@@ -361,6 +630,9 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
     stitchClipToTimeline,
     selectedElement,
     setSelectedElement,
+    // Stacked Track Management API
+    addTrack,
+    removeTrack,
     // Generic Dynamic Dispatch API
     addItem,
     updateItem,
@@ -371,6 +643,9 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
     updateCaptions,
     applyBatchActions,
     resetToSample,
+    // Real NLE Clip Splitting
+    splitClip,
+    cutRange,
     // Specific aliases
     addCut,
     removeCut,
