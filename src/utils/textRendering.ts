@@ -1,4 +1,4 @@
-import { TextOverlay, TextPlacement } from '@/types/editor';
+import { TextOverlay } from '@/types/editor';
 import React from 'react';
 
 export interface TextRenderMetrics {
@@ -46,7 +46,7 @@ export function computeTextMetrics(
 
   // Approximate or exact text width calculation
   const safeText = overlay.text || '';
-  let textWidth = measureTextFn
+  const textWidth = measureTextFn
     ? measureTextFn(safeText, fontString)
     : safeText.length * (fontSize * 0.6);
 

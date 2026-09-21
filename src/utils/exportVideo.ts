@@ -1,6 +1,6 @@
 'use client';
 
-import { Cut, Overlay, VideoProjectState, Zoom } from '@/types/editor';
+import { VideoProjectState } from '@/types/editor';
 import { getActiveOverlays, getActiveZoom, isTimeInsideCut } from './editor';
 import { computeTextMetrics } from './textRendering';
 
@@ -315,7 +315,7 @@ export async function exportProjectToMp4(
       setTimeout(() => {
         recorder.stop();
       }, 300);
-    } catch (err: any) {
+    } catch (err: unknown) {
       reject(err);
     }
   });

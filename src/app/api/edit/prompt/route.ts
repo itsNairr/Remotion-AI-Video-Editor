@@ -233,11 +233,11 @@ const updateTextDeclaration: FunctionDeclaration = {
 // Universal Mutation Handler: Modifies ANY timeline element in place with validation
 function applyElementUpdate(
   project: VideoProjectState,
-  args: Record<string, any>,
+  args: Record<string, unknown>,
   currentSec: number
 ): { description: string; success: boolean } {
-  const elementType = args.element_type || 'overlay';
-  const targetId = args.id;
+  const elementType = (args.element_type as string) || 'overlay';
+  const targetId = args.id as string | undefined;
   const changes: string[] = [];
 
   // 1. Overlay
@@ -668,7 +668,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const targetProject = currentProject || (body as any).project;
+    const bodyRecord = (body || {}) as Record<string, unknown>;
+    const targetProject = currentProject || (bodyRecord.project as VideoProjectState | undefined);
     if (!targetProject) {
       return NextResponse.json<ApiResponse<null>>(
         {
@@ -680,7 +681,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const currentSec = Number((playhead?.currentSec ?? (body as any).currentSec ?? 0).toFixed(2));
+    const currentSec = Number((playhead?.currentSec ?? (bodyRecord.currentSec as number | undefined) ?? 0).toFixed(2));
     const project: VideoProjectState = JSON.parse(JSON.stringify(targetProject));
     ensureProjectClips(project);
 
@@ -859,7 +860,7 @@ Typography & Knockout Rules:
 
         if (functionCalls && functionCalls.length > 0) {
           for (const call of functionCalls) {
-            const args = (call.args || {}) as Record<string, any>;
+            const args = (call.args || {}) as Record<string, unknown>;
 
             // 1. add_text
             if (call.name === 'add_text') {
@@ -1150,7 +1151,7 @@ Typography & Knockout Rules:
                   : project.zooms.findIndex((z) => z.startSec <= currentSec && currentSec <= z.endSec);
                 const targetIdx = idx >= 0 ? idx : project.zooms.length - 1;
                 if (targetIdx >= 0) {
-                  const removed = project.zooms.splice(targetIdx, 1)[0];
+                  project.zooms.splice(targetIdx, 1);
                   editsApplied = true;
                   actionDescription += `Removed camera zoom. `;
                 }
@@ -1160,8 +1161,9 @@ Typography & Knockout Rules:
         } else if (response.text) {
           actionDescription = response.text;
         }
-      } catch (geminiError: any) {
-        console.warn('Gemini API call failed, falling back to deterministic parser:', geminiError?.message || geminiError);
+      } catch (geminiError: unknown) {
+        const message = geminiError instanceof Error ? geminiError.message : String(geminiError);
+        console.warn('Gemini API call failed, falling back to deterministic parser:', message);
       }
     }
 

@@ -1,4 +1,4 @@
-import { TextOverlay, TextPlacement } from '@/types/editor';
+import { TextPlacement } from '@/types/editor';
 
 /**
  * Returns Tailwind positioning classes based on text placement
