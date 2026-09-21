@@ -1,6 +1,6 @@
 'use client';
 
-import { ActionCard, VideoProjectState } from '@/types';
+import { ActionCard, CaptionsConfig, ZoomTargetAnchor, ZoomTransition } from '@/types';
 import { useMemo } from 'react';
 import { UseVideoEditorReturn } from './useVideoEditor';
 
@@ -107,7 +107,7 @@ export function useActionCards(editor: UseVideoEditorReturn) {
     }
   };
 
-  const updateCard = (card: ActionCard, updates: Record<string, any>) => {
+  const updateCard = (card: ActionCard, updates: Record<string, unknown>) => {
     if (card.type === 'cut') {
       updateItem('cuts', card.associatedId, {
         ...(updates.startSec !== undefined && { startSec: Number(updates.startSec) }),
@@ -132,13 +132,13 @@ export function useActionCards(editor: UseVideoEditorReturn) {
         ...(updates.startSec !== undefined && { startSec: Number(updates.startSec) }),
         ...(updates.endSec !== undefined && { endSec: Number(updates.endSec) }),
         ...(updates.scale !== undefined && { scale: Number(updates.scale) }),
-        ...(updates.target_anchor !== undefined && { target_anchor: updates.target_anchor }),
-        ...(updates.transition !== undefined && { transition: updates.transition }),
+        ...(updates.target_anchor !== undefined && { target_anchor: updates.target_anchor as ZoomTargetAnchor }),
+        ...(updates.transition !== undefined && { transition: updates.transition as ZoomTransition }),
       });
     } else if (card.type === 'captions') {
       updateCaptions({
-        ...(updates.style !== undefined && { style: updates.style }),
-        ...(updates.highlight_color !== undefined && { highlight_color: updates.highlight_color }),
+        ...(updates.style !== undefined && { style: updates.style as CaptionsConfig['style'] }),
+        ...(updates.highlight_color !== undefined && { highlight_color: String(updates.highlight_color) }),
         ...(updates.max_words_per_line !== undefined && { max_words_per_line: Number(updates.max_words_per_line) }),
       });
     }

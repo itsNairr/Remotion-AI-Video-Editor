@@ -1,7 +1,7 @@
 'use client';
 
 import { editApi } from '@/api/edit.api';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { UseVideoEditorReturn } from './useVideoEditor';
 
 export interface ChatMessage {
@@ -24,12 +24,14 @@ export function usePromptChat(editor: UseVideoEditorReturn) {
   ]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Keep live references to prevent stale closures in async callbacks
+  // Keep live references in effects to prevent stale closures in async callbacks without violating react-hooks/refs
   const editorRef = useRef(editor);
-  editorRef.current = editor;
-
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+
+  useEffect(() => {
+    editorRef.current = editor;
+    messagesRef.current = messages;
+  });
 
   const submitPrompt = useCallback(
     async (promptText: string) => {
@@ -86,6 +88,7 @@ export function usePromptChat(editor: UseVideoEditorReturn) {
         ]);
       } catch (err: unknown) {
         // Error toast is already triggered by editApi via api.ts!
+        console.error('Failed to process prompt:', err);
         setMessages((prev) => [
           ...prev,
           {
@@ -99,7 +102,7 @@ export function usePromptChat(editor: UseVideoEditorReturn) {
         setIsLoading(false);
       }
     },
-    [editor, isLoading]
+    [isLoading]
   );
 
   return {
