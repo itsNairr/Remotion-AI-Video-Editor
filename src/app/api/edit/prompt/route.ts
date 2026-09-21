@@ -1,5 +1,5 @@
 import { ApiResponse, PromptRequestPayload, PromptResponsePayload } from '@/types/api';
-import { Cut, TextOverlay, TextPlacement, VideoClip, VideoProjectState, Zoom } from '@/types/editor';
+import { CaptionsConfig, Cut, TextOverlay, TextPlacement, VideoClip, VideoProjectState, Zoom, ZoomTargetAnchor, ZoomTransition } from '@/types/editor';
 import { cutRangeFromClips, splitClipAtTime } from '@/utils/editor';
 import {
   clampNumber,
@@ -267,7 +267,7 @@ function applyElementUpdate(
     }
 
     if (args.text) {
-      target.text = sanitizeUserPrompt(args.text, 100);
+      target.text = sanitizeUserPrompt(String(args.text), 100);
       changes.push(`text: "${target.text}"`);
     }
 
@@ -330,13 +330,13 @@ function applyElementUpdate(
     }
 
     if (args.target_anchor) {
-      target.target_anchor = args.target_anchor;
+      target.target_anchor = (args.target_anchor as ZoomTargetAnchor) || 'center';
       target.anchorY = (args.target_anchor === 'speaker_face' || args.target_anchor === 'top_center') ? 0.35 : 0.5;
       changes.push(`anchor: ${target.target_anchor}`);
     }
 
     if (args.transition) {
-      target.transition = args.transition;
+      target.transition = (args.transition as ZoomTransition) || 'instant_jump';
       changes.push(`transition: ${target.transition}`);
     }
 
@@ -416,7 +416,7 @@ function applyElementUpdate(
     }
 
     if (args.reason) {
-      target.reason = sanitizeUserPrompt(args.reason, 80);
+      target.reason = sanitizeUserPrompt(String(args.reason), 80);
       changes.push(`reason: "${target.reason}"`);
     }
 
@@ -444,8 +444,8 @@ function applyElementUpdate(
     }
 
     if (args.style) {
-      project.captions.style = args.style;
-      changes.push(`style: ${args.style}`);
+      project.captions.style = (args.style as CaptionsConfig['style']) || 'karaoke_bounce';
+      changes.push(`style: ${String(args.style)}`);
     }
 
     if (args.highlight_color) {
@@ -668,7 +668,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const bodyRecord = (body || {}) as Record<string, unknown>;
+    const bodyRecord = (body as unknown) as Record<string, unknown>;
     const targetProject = currentProject || (bodyRecord.project as VideoProjectState | undefined);
     if (!targetProject) {
       return NextResponse.json<ApiResponse<null>>(
@@ -883,7 +883,7 @@ Typography & Knockout Rules:
 
               const overlay: TextOverlay = {
                 id: `txt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                text: sanitizeUserPrompt(args.text || 'Highlight', 100),
+                text: sanitizeUserPrompt(String(args.text || 'Highlight'), 100),
                 startSec: Number(start.toFixed(2)),
                 endSec: Number(end.toFixed(2)),
                 placement: (args.placement as TextPlacement) || 'center',
@@ -894,7 +894,7 @@ Typography & Knockout Rules:
                   lowerPrompt.includes('times new roman') ? 'Times New Roman, serif' : 'Inter, system-ui, sans-serif'
                 ),
                 fontSize: clampNumber(args.fontSize, 16, 120, isKnockout ? 64 : 36),
-                fontWeight: args.fontWeight || (isKnockout ? '900' : 'bold'),
+                fontWeight: String(args.fontWeight || (isKnockout ? '900' : 'bold')),
                 isKnockout,
                 trackIndex: targetTrackIndex,
               };
@@ -915,7 +915,7 @@ Typography & Knockout Rules:
 
               const overlay: TextOverlay = {
                 id: `screen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                text: args.text ? sanitizeUserPrompt(args.text, 100) : '',
+                text: args.text ? sanitizeUserPrompt(String(args.text), 100) : '',
                 startSec: Number(start.toFixed(2)),
                 endSec: Number(end.toFixed(2)),
                 placement: 'center',
@@ -942,15 +942,15 @@ Typography & Knockout Rules:
             }
             // 2. stitch_video (Multi-video sequencing)
             else if (call.name === 'stitch_video') {
-              const fileName = (args.file_name || '').toLowerCase();
-              const position = args.position || 'end';
+              const fileName = String(args.file_name || '').toLowerCase();
+              const position = String(args.position || 'end');
 
               const matchedAsset =
                 (mediaAssets || []).find((a) =>
                   a.name.toLowerCase().includes(fileName) || fileName.includes(a.name.toLowerCase().replace(/\.[^/.]+$/, ''))
                 ) || {
                   id: `asset_${Date.now()}`,
-                  name: args.file_name || 'video_clip.mp4',
+                  name: String(args.file_name || 'video_clip.mp4'),
                   url: '/sample-video.mp4',
                   durationSec: 8,
                   width: 1280,
@@ -997,10 +997,10 @@ Typography & Knockout Rules:
                 startSec = trackClips.length > 0 ? Math.max(...trackClips.map((c) => c.endSec)) : 0;
               }
 
-              const newClip = {
+              const newClip: VideoClip = {
                 id: `clip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                 assetId: matchedAsset.id,
-                name: matchedAsset.name,
+                name: String(matchedAsset.name),
                 sourceUrl: matchedAsset.url,
                 startSec: Number(startSec.toFixed(2)),
                 endSec: Number((startSec + matchedAsset.durationSec).toFixed(2)),
@@ -1071,8 +1071,8 @@ Typography & Knockout Rules:
                 id: `cut_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                 startSec: Number(start.toFixed(2)),
                 endSec: Number(end.toFixed(2)),
-                reason: sanitizeUserPrompt(args.reason || 'Cut segment', 80),
-                ripple: args.ripple ?? true,
+                reason: sanitizeUserPrompt(String(args.reason || 'Cut segment'), 80),
+                ripple: Boolean(args.ripple ?? true),
               };
               appliedCuts.push(cut);
               editsApplied = true;
@@ -1095,8 +1095,8 @@ Typography & Knockout Rules:
                 startSec: Number(start.toFixed(2)),
                 endSec: Number(end.toFixed(2)),
                 scale: Number(scale.toFixed(2)),
-                target_anchor: args.target_anchor || 'center',
-                transition: args.transition || 'instant_jump',
+                target_anchor: (args.target_anchor as ZoomTargetAnchor) || 'center',
+                transition: (args.transition as ZoomTransition) || 'instant_jump',
                 anchorX: 0.5,
                 anchorY,
                 trackIndex: targetTrackIndex,
@@ -1108,15 +1108,17 @@ Typography & Knockout Rules:
             }
             // 5. configure_subtitles
             else if (call.name === 'configure_subtitles') {
+              const capStyle = (args.style as CaptionsConfig['style']) || 'karaoke_bounce';
+              const capColor = validateColor(args.highlight_color, '#FFDD00');
               project.captions = {
-                enabled: args.enabled ?? true,
-                style: args.style || 'karaoke_bounce',
-                highlight_color: validateColor(args.highlight_color, '#FFDD00'),
+                enabled: Boolean(args.enabled ?? true),
+                style: capStyle,
+                highlight_color: capColor,
                 max_words_per_line: clampNumber(args.max_words_per_line, 1, 6, 3),
                 position_y_offset: clampNumber(args.position_y_offset, 5, 50, 14),
               };
               editsApplied = true;
-              actionDescription += `💬 Configured dynamic captions (${project.captions.style}, ${project.captions.highlight_color}). `;
+              actionDescription += `💬 Configured dynamic captions (${capStyle}, ${capColor}). `;
             }
             // 6. remove_element
             else if (call.name === 'remove_element') {
