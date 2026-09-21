@@ -405,11 +405,11 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
     const newItem = {
       ...item,
       id: item.id || `${track.slice(0, 3)}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    } as any;
+    } as unknown as { id: string; startSec: number };
 
     setProject((prev) => ({
       ...prev,
-      [track]: addTrackItem(prev[track] as any[], newItem),
+      [track]: addTrackItem((prev[track] || []) as unknown as { id: string; startSec: number }[], newItem),
     }));
     return newItem;
   }, []);
@@ -421,14 +421,14 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
   ) => {
     setProject((prev) => ({
       ...prev,
-      [track]: updateTrackItem(prev[track] as any[], id, patch),
+      [track]: updateTrackItem((prev[track] || []) as unknown as { id: string; startSec: number }[], id, patch),
     }));
   }, []);
 
   const removeItem = useCallback((track: TimelineTrackType, id: string) => {
     setProject((prev) => ({
       ...prev,
-      [track]: removeTrackItem(prev[track] as any[], id),
+      [track]: removeTrackItem((prev[track] || []) as unknown as { id: string; startSec: number }[], id),
     }));
   }, []);
 
@@ -459,7 +459,7 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
       }
       return {
         ...prev,
-        [track]: updateTrackItem(prev[track] as any[], id, {
+        [track]: updateTrackItem((prev[track] || []) as unknown as { id: string; startSec: number; endSec?: number; trackIndex?: number }[], id, {
           startSec: Number(startSec.toFixed(2)),
           endSec: Number(endSec.toFixed(2)),
           ...(newTrackIndex !== undefined ? { trackIndex: newTrackIndex } : {}),
@@ -486,7 +486,7 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
   ) => {
     setProject((prev) => ({
       ...prev,
-      [track]: nudgeTrackItem(prev[track] as any[], id, deltaSec, edge, prev.durationSec),
+      [track]: nudgeTrackItem((prev[track] || []) as unknown as { id: string; startSec: number; endSec: number }[], id, deltaSec, edge, prev.durationSec),
     }));
   }, []);
 
@@ -508,22 +508,24 @@ export function useVideoEditor(initialProject: VideoProjectState = INITIAL_SAMPL
 
   const applyBatchActions = useCallback((actions: TimelineAction[]) => {
     setProject((prev) => {
-      let updated = { ...prev };
+      const updated = { ...prev };
       for (const act of actions) {
+        const currentTrackItems = (updated[act.track] || []) as unknown as { id: string; startSec: number; endSec?: number }[];
         if (act.action === 'add' && act.data) {
-          updated[act.track] = addTrackItem(updated[act.track] as any[], act.data) as any;
+          (updated as Record<string, unknown>)[act.track] = addTrackItem(currentTrackItems, act.data as { id: string; startSec: number });
         } else if (act.action === 'update' && act.id && act.data) {
-          updated[act.track] = updateTrackItem(updated[act.track] as any[], act.id, act.data) as any;
+          (updated as Record<string, unknown>)[act.track] = updateTrackItem(currentTrackItems, act.id, act.data as Record<string, unknown>);
         } else if (act.action === 'remove' && act.id) {
-          updated[act.track] = removeTrackItem(updated[act.track] as any[], act.id) as any;
+          (updated as Record<string, unknown>)[act.track] = removeTrackItem(currentTrackItems, act.id);
         } else if (act.action === 'nudge' && act.id && act.data) {
-          updated[act.track] = nudgeTrackItem(
-            updated[act.track] as any[],
+          const nudgeData = act.data as { deltaSec?: number; edge?: 'start' | 'end' };
+          (updated as Record<string, unknown>)[act.track] = nudgeTrackItem(
+            currentTrackItems as { id: string; startSec: number; endSec: number }[],
             act.id,
-            act.data.deltaSec || 0,
-            act.data.edge || 'start',
+            nudgeData.deltaSec || 0,
+            nudgeData.edge || 'start',
             updated.durationSec
-          ) as any;
+          );
         }
       }
       return updated;
