@@ -120,7 +120,7 @@ export interface TimelineAction {
   action: 'add' | 'update' | 'remove' | 'nudge';
   track: TimelineTrackType;
   id?: string;
-  data?: any;
+  data?: unknown;
 }
 
 export type ActionCardType = 'cut' | 'overlay' | 'zoom' | 'captions';
@@ -134,7 +134,7 @@ export interface ActionCard {
   endSec: number;
   associatedId: string;
   createdAt: number;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export interface PlayheadContext {
