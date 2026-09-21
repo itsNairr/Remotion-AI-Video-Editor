@@ -2,7 +2,7 @@
 
 import { VideoProjectState } from '@/types/editor';
 import { exportProjectToMp4, ExportProgress } from '@/utils/exportVideo';
-import { CheckCircle2, Download, Film, Loader2, Sparkles, X } from 'lucide-react';
+import { CheckCircle2, Download, Film, Loader2, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 
 interface ExportModalProps {
@@ -25,26 +25,26 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const handleClose = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsExporting(false);
+    setDownloadUrl(null);
+    setError(null);
+    setProgress({ percent: 0, currentSec: 0, status: '' });
+    onClose();
+  };
+
   useEffect(() => {
     if (!isOpen) {
-      // Reset state on close
-      setProgress({ percent: 0, currentSec: 0, status: '' });
-      setIsExporting(false);
-      setDownloadUrl(null);
-      setError(null);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
       return;
     }
 
     // Start export when opened
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
-    setIsExporting(true);
-    setError(null);
-    setDownloadUrl(null);
 
     exportProjectToMp4(
       project,
@@ -59,10 +59,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
           setFilename(result.filename);
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (abortController.signal.aborted) return;
         setIsExporting(false);
-        setError(err.message || 'Export failed');
+        const message = err instanceof Error ? err.message : 'Export failed';
+        setError(message);
       });
 
     return () => {
@@ -90,8 +91,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
           </div>
 
           <button
-            onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition"
+            onClick={handleClose}
+            className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -181,8 +182,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
 
           <div className="flex items-center gap-2">
             <button
-              onClick={onClose}
-              className="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-medium transition"
+              onClick={handleClose}
+              className="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-medium transition cursor-pointer"
             >
               {isExporting ? 'Cancel' : 'Close'}
             </button>

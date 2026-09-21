@@ -2,7 +2,7 @@
 
 import { usePromptChat } from '@/composables/usePromptChat';
 import { UseVideoEditorReturn } from '@/composables/useVideoEditor';
-import { Loader2, MessageSquare, Send, Sparkles } from 'lucide-react';
+import { Loader2, Send, Sparkles } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 
 interface PromptInputProps {

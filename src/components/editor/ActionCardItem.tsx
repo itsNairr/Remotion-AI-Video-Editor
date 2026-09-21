@@ -1,14 +1,14 @@
 'use client';
 
-import { ActionCard } from '@/types';
+import { ActionCard, TextPlacement, ZoomTargetAnchor, ZoomTransition } from '@/types';
 import { formatTimecode } from '@/utils/time';
-import { Check, Minus, Pencil, Plus, Scissors, Subtitles, Trash2, Type, X, ZoomIn } from 'lucide-react';
+import { Check, Pencil, Scissors, Subtitles, Trash2, Type, ZoomIn } from 'lucide-react';
 import React, { useState } from 'react';
 
 interface ActionCardItemProps {
   card: ActionCard;
   onDelete: (card: ActionCard) => void;
-  onUpdate: (card: ActionCard, updates: Record<string, any>) => void;
+  onUpdate: (card: ActionCard, updates: Record<string, unknown>) => void;
   onNudge: (card: ActionCard, deltaSec: number, edge: 'start' | 'end') => void;
 }
 
@@ -20,26 +20,26 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({ card, onDelete, 
   const [editEnd, setEditEnd] = useState(card.endSec);
 
   // Cuts
-  const [editReason, setEditReason] = useState(card.details?.reason || card.description || '');
+  const [editReason, setEditReason] = useState<string>(String(card.details?.reason ?? card.description ?? ''));
 
   // Overlays (Explicit typography & design properties)
-  const [editText, setEditText] = useState(card.details?.text || '');
-  const [editPlacement, setEditPlacement] = useState(card.details?.placement || 'center');
-  const [editTextColor, setEditTextColor] = useState(card.details?.textColor || '#ffffff');
-  const [editBgColor, setEditBgColor] = useState(card.details?.bgColor || 'rgba(0, 0, 0, 0.75)');
-  const [editFontFamily, setEditFontFamily] = useState(card.details?.fontFamily || 'Inter, system-ui, sans-serif');
-  const [editFontSize, setEditFontSize] = useState(card.details?.fontSize || 36);
-  const [editFontWeight, setEditFontWeight] = useState(card.details?.fontWeight || 'bold');
-  const [editIsKnockout, setEditIsKnockout] = useState(Boolean(card.details?.isKnockout));
+  const [editText, setEditText] = useState<string>(String(card.details?.text ?? ''));
+  const [editPlacement, setEditPlacement] = useState<TextPlacement>((card.details?.placement as TextPlacement) || 'center');
+  const [editTextColor, setEditTextColor] = useState<string>(String(card.details?.textColor ?? '#ffffff'));
+  const [editBgColor, setEditBgColor] = useState<string>(String(card.details?.bgColor ?? 'rgba(0, 0, 0, 0.75)'));
+  const [editFontFamily, setEditFontFamily] = useState<string>(String(card.details?.fontFamily ?? 'Inter, system-ui, sans-serif'));
+  const [editFontSize, setEditFontSize] = useState<number>(Number(card.details?.fontSize ?? 36));
+  const [editFontWeight, setEditFontWeight] = useState<string>(String(card.details?.fontWeight ?? 'bold'));
+  const [editIsKnockout, setEditIsKnockout] = useState<boolean>(Boolean(card.details?.isKnockout));
 
   // Zooms
-  const [editScale, setEditScale] = useState(card.details?.scale || 1.25);
-  const [editAnchor, setEditAnchor] = useState(card.details?.target_anchor || 'center');
-  const [editTransition, setEditTransition] = useState(card.details?.transition || 'instant_jump');
+  const [editScale, setEditScale] = useState<number>(Number(card.details?.scale ?? 1.25));
+  const [editAnchor, setEditAnchor] = useState<ZoomTargetAnchor>((card.details?.target_anchor as ZoomTargetAnchor) || 'center');
+  const [editTransition, setEditTransition] = useState<ZoomTransition>((card.details?.transition as ZoomTransition) || 'instant_jump');
 
   // Captions
-  const [editCaptionStyle, setEditCaptionStyle] = useState(card.details?.style || 'karaoke_bounce');
-  const [editHighlightColor, setEditHighlightColor] = useState(card.details?.highlight_color || '#FFDD00');
+  const [editCaptionStyle, setEditCaptionStyle] = useState<string>(String(card.details?.style ?? 'karaoke_bounce'));
+  const [editHighlightColor, setEditHighlightColor] = useState<string>(String(card.details?.highlight_color ?? '#FFDD00'));
 
   const handleSave = () => {
     onUpdate(card, {
@@ -66,20 +66,20 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({ card, onDelete, 
   const handleCancel = () => {
     setEditStart(card.startSec);
     setEditEnd(card.endSec);
-    setEditReason(card.details?.reason || card.description || '');
-    setEditText(card.details?.text || '');
-    setEditPlacement(card.details?.placement || 'center');
-    setEditTextColor(card.details?.textColor || '#ffffff');
-    setEditBgColor(card.details?.bgColor || 'rgba(0, 0, 0, 0.75)');
-    setEditFontFamily(card.details?.fontFamily || 'Inter, system-ui, sans-serif');
-    setEditFontSize(card.details?.fontSize || 36);
-    setEditFontWeight(card.details?.fontWeight || 'bold');
+    setEditReason(String(card.details?.reason ?? card.description ?? ''));
+    setEditText(String(card.details?.text ?? ''));
+    setEditPlacement((card.details?.placement as TextPlacement) || 'center');
+    setEditTextColor(String(card.details?.textColor ?? '#ffffff'));
+    setEditBgColor(String(card.details?.bgColor ?? 'rgba(0, 0, 0, 0.75)'));
+    setEditFontFamily(String(card.details?.fontFamily ?? 'Inter, system-ui, sans-serif'));
+    setEditFontSize(Number(card.details?.fontSize ?? 36));
+    setEditFontWeight(String(card.details?.fontWeight ?? 'bold'));
     setEditIsKnockout(Boolean(card.details?.isKnockout));
-    setEditScale(card.details?.scale || 1.25);
-    setEditAnchor(card.details?.target_anchor || 'center');
-    setEditTransition(card.details?.transition || 'instant_jump');
-    setEditCaptionStyle(card.details?.style || 'karaoke_bounce');
-    setEditHighlightColor(card.details?.highlight_color || '#FFDD00');
+    setEditScale(Number(card.details?.scale ?? 1.25));
+    setEditAnchor((card.details?.target_anchor as ZoomTargetAnchor) || 'center');
+    setEditTransition((card.details?.transition as ZoomTransition) || 'instant_jump');
+    setEditCaptionStyle(String(card.details?.style ?? 'karaoke_bounce'));
+    setEditHighlightColor(String(card.details?.highlight_color ?? '#FFDD00'));
     setIsEditing(false);
   };
 
@@ -216,7 +216,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({ card, onDelete, 
                   <span className="text-[10px] uppercase font-bold text-zinc-400">Placement</span>
                   <select
                     value={editPlacement}
-                    onChange={(e) => setEditPlacement(e.target.value as any)}
+                    onChange={(e) => setEditPlacement(e.target.value as TextPlacement)}
                     className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
                   >
                     <option value="center">Center</option>
@@ -330,7 +330,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({ card, onDelete, 
                 <span className="text-[10px] uppercase font-bold text-zinc-400">Anchor</span>
                 <select
                   value={editAnchor}
-                  onChange={(e) => setEditAnchor(e.target.value)}
+                  onChange={(e) => setEditAnchor(e.target.value as ZoomTargetAnchor)}
                   className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="center">Center</option>
@@ -342,7 +342,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({ card, onDelete, 
                 <span className="text-[10px] uppercase font-bold text-zinc-400">Transition</span>
                 <select
                   value={editTransition}
-                  onChange={(e) => setEditTransition(e.target.value)}
+                  onChange={(e) => setEditTransition(e.target.value as ZoomTransition)}
                   className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="instant_jump">Instant Jump</option>

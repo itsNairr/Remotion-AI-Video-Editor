@@ -3,7 +3,7 @@
 import { UseVideoEditorReturn } from '@/composables/useVideoEditor';
 import { MediaAsset } from '@/types';
 import { formatTimecode } from '@/utils/time';
-import { Clock, Film, FolderUp, Plus, Sparkles, UploadCloud, Video } from 'lucide-react';
+import { Clock, Film, FolderUp, Plus, UploadCloud, Video } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -157,6 +157,7 @@ export const MediaBin: React.FC<MediaBinProps> = ({ editor }) => {
                 {/* Thumbnail / Video Icon */}
                 <div className="relative w-16 h-10 rounded-lg bg-zinc-950 overflow-hidden flex items-center justify-center border border-zinc-800 shrink-0">
                   {asset.thumbnailUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={asset.thumbnailUrl}
                       alt={asset.name}

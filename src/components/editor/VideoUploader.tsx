@@ -1,8 +1,8 @@
 'use client';
 
 import { UseVideoEditorReturn } from '@/composables/useVideoEditor';
-import { FileVideo, Plus, Upload, Video } from 'lucide-react';
-import React, { useRef, useState } from 'react';
+import { Upload } from 'lucide-react';
+import React, { useRef } from 'react';
 import { toast } from 'sonner';
 
 interface VideoUploaderProps {
@@ -11,7 +11,6 @@ interface VideoUploaderProps {
 
 export const VideoUploader: React.FC<VideoUploaderProps> = ({ editor }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
   const processVideoFile = (file: File) => {
     if (!file.type.startsWith('video/')) {
@@ -68,15 +67,6 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({ editor }) => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      processVideoFile(file);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
     if (file) {
       processVideoFile(file);
     }
